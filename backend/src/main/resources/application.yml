@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: gscores
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/gscores
+    username: gscores
+    password: gscores
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 1000
+        order_inserts: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.goldenowl.gscores: DEBUG
