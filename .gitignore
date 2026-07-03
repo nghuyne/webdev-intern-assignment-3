@@ -1,0 +1,7 @@
+.env
+
+# Agent/AI tooling artifacts, not part of the application
+.agent/
+.claude/
+_bmad/
+_bmad-output/

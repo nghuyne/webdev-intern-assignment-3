@@ -12,7 +12,8 @@ public interface KetQuaThiRepository extends JpaRepository<KetQuaThi, Long> {
     // Dung cho GET /api/scores/{sbd}. Join qua thi_sinh.sbd (unique index), khong can cot sbd rieng tren bang nay.
     @Query("SELECT k FROM KetQuaThi k " +
             "JOIN FETCH k.monThi " +
-            "WHERE k.thiSinh.sbd = :sbd")
+            "WHERE k.thiSinh.sbd = :sbd " +
+            "ORDER BY k.monThi.id")
     List<KetQuaThi> findAllByThiSinhSbd(@Param("sbd") String sbd);
 
     // Fallback report band-count khi Redis miss. k.monThi.id chi doc cot FK mon_thi_id, khong join bang mon_thi,
@@ -23,7 +24,7 @@ public interface KetQuaThiRepository extends JpaRepository<KetQuaThi, Long> {
             "SUM(CASE WHEN k.diem >= 4 AND k.diem < 6 THEN 1 ELSE 0 END), " +
             "SUM(CASE WHEN k.diem < 4 THEN 1 ELSE 0 END) " +
             "FROM KetQuaThi k WHERE k.monThi.id = :monThiId")
-    Object[] countBandsByMonThiId(@Param("monThiId") Long monThiId);
+    List<Object[]> countBandsByMonThiId(@Param("monThiId") Long monThiId);
 
     // Fallback top 10 khoi A khi Redis mat du lieu. ma_mon khop dung ten cot CSV goc: toan, vat_li, hoa_hoc.
     @Query(value = """

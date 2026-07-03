@@ -116,8 +116,14 @@ public class CsvScoreSeederService {
             }
         }
 
-        batchInsertService.insertBatch(rows, monThiIds, ngoaiNguIds, properties.getFileName(), newLineOffset);
+        // Redis must be written before the Postgres transaction that advances the
+        // checkpoint commits. If the process crashes between them, checkpoint would move
+        // past a batch whose Group A scores never reached the sorted set - and a resumed
+        // run never revisits an already-committed line range, so that gap would be
+        // permanent. Writing Redis first means a crash before the Postgres commit just
+        // gets the whole batch retried on resume (both writes are idempotent).
         writeGroupAScoresToRedis(rows);
+        batchInsertService.insertBatch(rows, monThiIds, ngoaiNguIds, properties.getFileName(), newLineOffset);
     }
 
     private void writeGroupAScoresToRedis(List<CsvRowParser.ParsedRow> rows) {
