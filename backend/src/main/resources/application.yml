@@ -44,3 +44,5 @@ app:
     csv-path: ../dataset/diem_thi_thpt_2024.csv
     file-name: diem_thi_thpt_2024.csv
     batch-size: 2000
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
