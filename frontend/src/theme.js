@@ -1,8 +1,8 @@
 export const SCORE_BANDS = [
   { key: 'gioi', label: 'Giỏi (≥ 8)', color: '#5B8C6E' },
-  { key: 'kha', label: 'Khá (6.5 - 8)', color: '#5C7CB8' },
-  { key: 'trungBinh', label: 'Trung bình (5 - 6.5)', color: '#D3A24C' },
-  { key: 'yeu', label: 'Yếu (< 5)', color: '#C16B5E' },
+  { key: 'kha', label: 'Khá (6 - 8)', color: '#5C7CB8' },
+  { key: 'trungBinh', label: 'Trung bình (4 - 6)', color: '#D3A24C' },
+  { key: 'yeu', label: 'Yếu (< 4)', color: '#C16B5E' },
 ]
 
 export const MEDALS = {
