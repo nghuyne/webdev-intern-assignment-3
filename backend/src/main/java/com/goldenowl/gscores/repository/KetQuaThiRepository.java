@@ -37,7 +37,7 @@ public interface KetQuaThiRepository extends JpaRepository<KetQuaThi, Long> {
                 AND ly.mon_thi_id = (SELECT id FROM mon_thi WHERE ma_mon = 'vat_li')
             JOIN ket_qua_thi hoa ON hoa.thi_sinh_id = t.id
                 AND hoa.mon_thi_id = (SELECT id FROM mon_thi WHERE ma_mon = 'hoa_hoc')
-            ORDER BY tong_diem DESC
+            ORDER BY tong_diem DESC, t.sbd ASC
             LIMIT 10
             """, nativeQuery = true)
     List<Object[]> findTop10GroupA();

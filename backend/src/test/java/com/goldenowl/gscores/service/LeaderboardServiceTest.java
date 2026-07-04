@@ -88,6 +88,45 @@ class LeaderboardServiceTest {
         verify(redisTemplate, never()).opsForZSet();
     }
 
+    @Test
+    void completed_tieAtRank10Boundary_picksSmallestSbdAmongAllTiedCandidates() {
+        givenCheckpointStatus(CheckpointStatus.COMPLETED);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+
+        // Ranks 1-9 are strictly higher than the tie group so they're unaffected.
+        Set<ZSetOperations.TypedTuple<String>> strictlyHigher = new LinkedHashSet<>();
+        for (int i = 1; i <= 9; i++) {
+            strictlyHigher.add(ZSetOperations.TypedTuple.of("higher" + i, 30.0 + i));
+        }
+        // 15 candidates tied at 29.15 span ranks 10-24. ZREVRANGE's own tie-break is
+        // member DESC, so a naive reverseRangeWithScores(0, 9) would return the 11
+        // members with the LARGEST sbd here (sbd11..sbd25) - the exact opposite of the
+        // sbd-ASC winner (sbd11) our rule requires.
+        Set<ZSetOperations.TypedTuple<String>> tieGroup = new LinkedHashSet<>();
+        for (int i = 25; i >= 11; i--) {
+            tieGroup.add(ZSetOperations.TypedTuple.of("sbd" + i, 29.15));
+        }
+        // Simulate the ZSet returning exactly TOP_N=10 elements for the initial window:
+        // 9 strictly-higher + 1 from the tie group (Redis's own member-DESC tie-break
+        // puts sbd25 first).
+        Set<ZSetOperations.TypedTuple<String>> initialWindow = new LinkedHashSet<>(strictlyHigher);
+        initialWindow.add(ZSetOperations.TypedTuple.of("sbd25", 29.15));
+        when(zSetOperations.reverseRangeWithScores(CsvScoreSeederService.GROUP_A_LEADERBOARD_KEY, 0, 9))
+                .thenReturn(initialWindow);
+
+        Set<ZSetOperations.TypedTuple<String>> allAtOrAboveCutoff = new LinkedHashSet<>(strictlyHigher);
+        allAtOrAboveCutoff.addAll(tieGroup);
+        when(zSetOperations.reverseRangeByScoreWithScores(CsvScoreSeederService.GROUP_A_LEADERBOARD_KEY,
+                29.15, Double.POSITIVE_INFINITY))
+                .thenReturn(allAtOrAboveCutoff);
+
+        List<LeaderboardEntryDto> result = leaderboardService.getGroupATop10();
+
+        assertThat(result).hasSize(10);
+        assertThat(result.get(9)).isEqualTo(new LeaderboardEntryDto(10, "sbd11", BigDecimal.valueOf(29.15)));
+        assertThat(result).extracting(LeaderboardEntryDto::sbd).doesNotContain("sbd25", "sbd24", "sbd12");
+    }
+
     // Missing-subject exclusion (Toan/Ly/Hoa) is enforced upstream, not in this service:
     // CsvScoreSeederService#writeGroupAScoresToRedis only pushes candidates whose CSV row
     // contains all 3 Group A subjects, and KetQuaThiRepository#findTop10GroupA relies on an
