@@ -40,7 +40,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/gscores
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/gscores?reWriteBatchedInserts=true
       SPRING_DATASOURCE_USERNAME: gscores
       SPRING_DATASOURCE_PASSWORD: gscores
       SPRING_DATA_REDIS_HOST: redis
