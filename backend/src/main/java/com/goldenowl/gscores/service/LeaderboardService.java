@@ -24,7 +24,12 @@ import java.util.Set;
  * migration_checkpoint for the seed file is COMPLETED - while a seed is still
  * PENDING/IN_PROGRESS (or failed), the sorted set can hold a partial batch range
  * (see CsvScoreSeederService.processBatch), so a ZCARD-only check would silently
- * serve wrong rankings instead of falling back to Postgres.
+ * serve wrong rankings instead of falling back to Postgres. A COMPLETED checkpoint
+ * doesn't guarantee the ZSET is still intact either - if it comes back with fewer
+ * than TOP_N members, that count is checked against KetQuaThiRepository#countGroupA
+ * before being trusted as "the whole set" (see #fromRedis), otherwise data lost from
+ * Redis after seeding (crash without persistence, eviction, stray ZREM) would be
+ * served as a truncated but "complete" leaderboard.
  *
  * Tie-break rule (must match KetQuaThiRepository#findTop10GroupA): tong_diem DESC,
  * sbd ASC. Redis's own ZREVRANGE tie-break is member DESC (opposite of what we
@@ -74,7 +79,15 @@ public class LeaderboardService {
             return null;
         }
         if (top10.size() < TOP_N) {
-            // Fewer than TOP_N candidates exist at all, so this is already the whole set.
+            // reverseRangeWithScores(0, TOP_N - 1) is an index range, not a LIMIT: a result
+            // shorter than TOP_N means the ZSET truly has only this many members right now,
+            // so top10.size() here already equals ZCARD. That's only trustworthy as "the whole
+            // set" if Redis didn't lose members (crash without persistence, eviction, stray
+            // ZREM) after the checkpoint was marked COMPLETED - verify against the real
+            // candidate count in Postgres before serving it as complete.
+            if (top10.size() != ketQuaThiRepository.countGroupA()) {
+                return null;
+            }
             return toDtos(sortByTieBreakOrder(top10));
         }
 

@@ -62,6 +62,9 @@ class LeaderboardServiceTest {
                 ZSetOperations.TypedTuple.of("sbd002", 26.0)));
         when(zSetOperations.reverseRangeWithScores(CsvScoreSeederService.GROUP_A_LEADERBOARD_KEY, 0, 9))
                 .thenReturn(tuples);
+        // Fewer than TOP_N members: fromRedis() verifies this against the real Postgres
+        // count before trusting it as the whole set. 2 == 2, so it matches here.
+        when(ketQuaThiRepository.countGroupA()).thenReturn(2L);
 
         List<LeaderboardEntryDto> result = leaderboardService.getGroupATop10();
 
@@ -69,6 +72,51 @@ class LeaderboardServiceTest {
                 new LeaderboardEntryDto(1, "sbd001", BigDecimal.valueOf(27.5)),
                 new LeaderboardEntryDto(2, "sbd002", BigDecimal.valueOf(26.0)));
         verify(ketQuaThiRepository, never()).findTop10GroupA();
+    }
+
+    @Test
+    void completed_fewerThanTopN_matchesPostgresCount_trustsRedisAsCompleteSet() {
+        givenCheckpointStatus(CheckpointStatus.COMPLETED);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        Set<ZSetOperations.TypedTuple<String>> tuples = new LinkedHashSet<>(List.of(
+                ZSetOperations.TypedTuple.of("sbd001", 27.5),
+                ZSetOperations.TypedTuple.of("sbd002", 26.0),
+                ZSetOperations.TypedTuple.of("sbd003", 25.0)));
+        when(zSetOperations.reverseRangeWithScores(CsvScoreSeederService.GROUP_A_LEADERBOARD_KEY, 0, 9))
+                .thenReturn(tuples);
+        // There genuinely are only 3 Group A candidates in Postgres, matching the ZSET.
+        when(ketQuaThiRepository.countGroupA()).thenReturn(3L);
+
+        List<LeaderboardEntryDto> result = leaderboardService.getGroupATop10();
+
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting(LeaderboardEntryDto::sbd)
+                .containsExactly("sbd001", "sbd002", "sbd003");
+        verify(ketQuaThiRepository, never()).findTop10GroupA();
+    }
+
+    @Test
+    void completed_fewerThanTopN_zsetLostMembers_fallsBackToPostgresInsteadOfServingPartialResult() {
+        givenCheckpointStatus(CheckpointStatus.COMPLETED);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        // Redis lost data after seeding completed (crash without persistence, eviction,
+        // stray ZREM) - only 3 members remain in a ZSET that should hold far more.
+        Set<ZSetOperations.TypedTuple<String>> tuples = new LinkedHashSet<>(List.of(
+                ZSetOperations.TypedTuple.of("sbd001", 27.5),
+                ZSetOperations.TypedTuple.of("sbd002", 26.0),
+                ZSetOperations.TypedTuple.of("sbd003", 25.0)));
+        when(zSetOperations.reverseRangeWithScores(CsvScoreSeederService.GROUP_A_LEADERBOARD_KEY, 0, 9))
+                .thenReturn(tuples);
+        // Postgres says there are actually 10 Group A candidates, so 3 can't be the whole set.
+        when(ketQuaThiRepository.countGroupA()).thenReturn(10L);
+        when(ketQuaThiRepository.findTop10GroupA()).thenReturn(List.<Object[]>of(
+                new Object[]{"sbd999", BigDecimal.valueOf(29.5)}));
+
+        List<LeaderboardEntryDto> result = leaderboardService.getGroupATop10();
+
+        assertThat(result).containsExactly(
+                new LeaderboardEntryDto(1, "sbd999", BigDecimal.valueOf(29.5)));
+        verify(ketQuaThiRepository).findTop10GroupA();
     }
 
     @ParameterizedTest
@@ -143,6 +191,7 @@ class LeaderboardServiceTest {
                 ZSetOperations.TypedTuple.of("sbd002", 26.0)));
         when(zSetOperations.reverseRangeWithScores(CsvScoreSeederService.GROUP_A_LEADERBOARD_KEY, 0, 9))
                 .thenReturn(tuples);
+        when(ketQuaThiRepository.countGroupA()).thenReturn(2L);
 
         List<LeaderboardEntryDto> result = leaderboardService.getGroupATop10();
 

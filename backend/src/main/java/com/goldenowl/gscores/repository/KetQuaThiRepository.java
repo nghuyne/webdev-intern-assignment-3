@@ -41,4 +41,19 @@ public interface KetQuaThiRepository extends JpaRepository<KetQuaThi, Long> {
             LIMIT 10
             """, nativeQuery = true)
     List<Object[]> findTop10GroupA();
+
+    // Dung de xac minh ZSET leaderboard:groupA con nguyen ven khi no tra ve it hon TOP_N
+    // member (xem LeaderboardService#fromRedis) - so ZCARD voi tong so thi sinh khoi A that
+    // trong Postgres truoc khi tin day la toan bo tap hop thay vi Redis bi mat du lieu.
+    @Query(value = """
+            SELECT COUNT(*)
+            FROM thi_sinh t
+            JOIN ket_qua_thi toan ON toan.thi_sinh_id = t.id
+                AND toan.mon_thi_id = (SELECT id FROM mon_thi WHERE ma_mon = 'toan')
+            JOIN ket_qua_thi ly ON ly.thi_sinh_id = t.id
+                AND ly.mon_thi_id = (SELECT id FROM mon_thi WHERE ma_mon = 'vat_li')
+            JOIN ket_qua_thi hoa ON hoa.thi_sinh_id = t.id
+                AND hoa.mon_thi_id = (SELECT id FROM mon_thi WHERE ma_mon = 'hoa_hoc')
+            """, nativeQuery = true)
+    long countGroupA();
 }
