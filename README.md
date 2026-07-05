@@ -4,6 +4,8 @@ A full-stack web application for importing, searching, and analyzing Vietnam's *
 
 The dataset contains **1,061,605 candidates** across **9 subjects**. The app ingests the raw CSV into a normalized PostgreSQL schema, then exposes score lookup, score-distribution reporting, and a Group A leaderboard on top of it.
 
+**Live demo:** [TODO: add Vercel URL here] — seeded with a **10,000-row sample** of the dataset (free-tier Postgres/Redis can't fit the full 1,061,605 rows). All features work identically at this scale; run locally via Docker Compose to see it with the full dataset. See [Deployment](#deployment) for how the demo is set up.
+
 ---
 
 ## Table of Contents
@@ -107,7 +109,8 @@ webdev-intern-assignment-3/
 │       ├── components/               Layout, Sidebar, Header, Card, icons
 │       └── pages/                    Lookup, Report, Leaderboard
 ├── dataset/
-│   └── diem_thi_thpt_2024.csv        Raw source data (1,061,605 rows)
+│   ├── diem_thi_thpt_2024.csv         Raw source data (1,061,605 rows)
+│   └── diem_thi_thpt_2024_demo.csv    10,000-row sample, used for the free-tier live demo
 └── docker-compose.yml
 ```
 
@@ -306,4 +309,43 @@ npm run lint
 
 ## Deployment
 
-The application is fully containerized and deployment-ready: `docker-compose.yml` builds production images for both services (a JRE-slim runtime image for the backend, an Nginx-served static build for the frontend), so it can be deployed as-is to any container host (Fly.io, Railway, Render, a VPS, etc.) by pointing `APP_CORS_ALLOWED_ORIGINS` and `VITE_API_BASE_URL` at the deployed domains.
+The application is fully containerized: `docker-compose.yml` builds production images for both services (a JRE-slim runtime image for the backend, an Nginx-served static build for the frontend), so it can be deployed as-is to any container host by pointing `APP_CORS_ALLOWED_ORIGINS` and `VITE_API_BASE_URL` at the deployed domains.
+
+The live demo linked above uses a free-tier split, since a single free-tier host generally can't fit both a Postgres+Redis instance and the ~1M-row dataset:
+
+- **Postgres** → [Supabase](https://supabase.com) (free tier)
+- **Backend + Redis** → [Railway](https://railway.app) (free tier)
+- **Frontend** → [Vercel](https://vercel.com) (free tier)
+
+Because free-tier Postgres/Redis storage is limited, the demo seeds `dataset/diem_thi_thpt_2024_demo.csv` (10,000 rows) instead of the full dataset. The seeder reads the CSV from the classpath, not a mounted volume, since Railway doesn't support host-mounted volumes like Docker Compose does — the demo CSV is already bundled at `backend/src/main/resources/dataset/diem_thi_thpt_2024_demo.csv` so it ships inside the built image.
+
+### 1. Supabase (Postgres)
+
+1. Create a new project at [supabase.com](https://supabase.com).
+2. Grab the connection details from **Project Settings → Database** (host, port, database, user, password).
+3. Flyway runs the schema migrations automatically on the backend's first startup — no manual SQL needed.
+
+### 2. Railway (backend + Redis)
+
+1. Create a new Railway project, add a **Redis** plugin, and add a service built from `backend/Dockerfile`.
+2. Set these environment variables on the backend service:
+
+   | Variable | Value |
+   |---|---|
+   | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://<supabase-host>:5432/postgres?reWriteBatchedInserts=true` |
+   | `SPRING_DATASOURCE_USERNAME` | Supabase Postgres user |
+   | `SPRING_DATASOURCE_PASSWORD` | Supabase Postgres password |
+   | `SPRING_DATA_REDIS_HOST` / `SPRING_DATA_REDIS_PORT` / `SPRING_DATA_REDIS_PASSWORD` | From Railway's Redis plugin (`REDISHOST` / `REDISPORT` / `REDISPASSWORD`) |
+   | `APP_SEEDER_ENABLED` | `true` for the first deploy only |
+   | `APP_SEEDER_CSV_PATH` | `classpath:dataset/diem_thi_thpt_2024_demo.csv` |
+   | `APP_SEEDER_FILE_NAME` | `diem_thi_thpt_2024_demo.csv` |
+   | `APP_CORS_ALLOWED_ORIGINS` | Your Vercel URL, once known (step 3) |
+
+3. Deploy, then watch the logs for `Seed completed for diem_thi_thpt_2024_demo.csv`. After that, set `APP_SEEDER_ENABLED=false` and redeploy — same as the local Docker Compose flow, just against a different CSV.
+4. Note the public Railway backend URL for step 3.
+
+### 3. Vercel (frontend)
+
+1. Import `frontend/` as a Vercel project (framework preset: Vite).
+2. Set the build-time environment variable `VITE_API_BASE_URL` to the Railway backend URL from step 2.
+3. Deploy, then go back to Railway and set `APP_CORS_ALLOWED_ORIGINS` to the resulting Vercel URL (redeploy the backend so the change takes effect).
