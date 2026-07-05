@@ -16,11 +16,13 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import org.springframework.core.io.ClassPathResource;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -61,21 +63,21 @@ public class CsvScoreSeederService {
         Map<String, Long> ngoaiNguIds = ngoaiNguRepository.findAll().stream()
                 .collect(Collectors.toMap(NgoaiNgu::getMaNgoaiNgu, NgoaiNgu::getId));
 
-        Path csvPath = Path.of(properties.getCsvPath());
+        String rawPath = properties.getCsvPath();
         long skip = checkpoint.getLastLineOffset();
         log.info("Starting seed for {} from line offset {}", properties.getFileName(), skip);
 
-        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+        try (BufferedReader reader = openCsv(rawPath)) {
             String headerLine = reader.readLine();
             if (headerLine == null) {
-                throw new IllegalStateException("CSV file is empty: " + csvPath);
+                throw new IllegalStateException("CSV file is empty: " + rawPath);
             }
             CsvRowParser.ColumnMapping mapping = CsvRowParser.parseHeader(headerLine);
 
             for (long i = 0; i < skip; i++) {
                 if (reader.readLine() == null) {
                     throw new IllegalStateException(
-                            "Checkpoint offset " + skip + " exceeds file length for " + csvPath);
+                            "Checkpoint offset " + skip + " exceeds file length for " + rawPath);
                 }
             }
 
@@ -145,6 +147,20 @@ public class CsvScoreSeederService {
             tuples.add(ZSetOperations.TypedTuple.of(score.sbd(), score.total().doubleValue()));
         }
         redisTemplate.opsForZSet().add(GROUP_A_LEADERBOARD_KEY, tuples);
+    }
+
+    /**
+     * Supports two path formats:
+     * - "classpath:dataset/foo.csv" → reads from jar/classpath (Railway / embedded)
+     * - "/absolute/path/foo.csv"    → reads from filesystem (Docker Compose local mount)
+     */
+    private BufferedReader openCsv(String path) throws IOException {
+        if (path.startsWith("classpath:")) {
+            String classpathLocation = path.substring("classpath:".length());
+            return new BufferedReader(new InputStreamReader(
+                    new ClassPathResource(classpathLocation).getInputStream(), StandardCharsets.UTF_8));
+        }
+        return Files.newBufferedReader(Path.of(path), StandardCharsets.UTF_8);
     }
 
     private MigrationCheckpoint createInitialCheckpoint() {
