@@ -3,9 +3,9 @@ spring:
     name: gscores
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/gscores?reWriteBatchedInserts=true
-    username: gscores
-    password: gscores
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/gscores?reWriteBatchedInserts=true}
+    username: ${SPRING_DATASOURCE_USERNAME:gscores}
+    password: ${SPRING_DATASOURCE_PASSWORD:gscores}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -30,6 +30,7 @@ spring:
     redis:
       host: localhost
       port: 6379
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
 
 server:
   port: 8080
