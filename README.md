@@ -4,12 +4,19 @@ A full-stack web application for importing, searching, and analyzing Vietnam's *
 
 The dataset contains **1,061,605 candidates** across **9 subjects**. The app ingests the raw CSV into a normalized PostgreSQL schema, then exposes score lookup, score-distribution reporting, and a Group A leaderboard on top of it.
 
-**Live demo:** [TODO: add Vercel URL here] — seeded with a **10,000-row sample** of the dataset (free-tier Postgres/Redis can't fit the full 1,061,605 rows). All features work identically at this scale; run locally via Docker Compose to see it with the full dataset. See [Deployment](#deployment) for how the demo is set up.
+---
+
+## Live Demo
+
+**[TODO: add Vercel URL here]**
+
+The demo is seeded with a **10,000-row sample** of the dataset — free-tier Postgres/Redis can't fit the full 1,061,605 rows. All features work identically at this scale; run locally via Docker Compose (see [Getting Started](#getting-started)) to see it with the full dataset. See [Deployment](#deployment) for how the demo is hosted and seeded.
 
 ---
 
 ## Table of Contents
 
+- [Live Demo](#live-demo)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture & Key Design Decisions](#architecture--key-design-decisions)
