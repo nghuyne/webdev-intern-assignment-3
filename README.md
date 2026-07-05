@@ -10,6 +10,9 @@ The dataset contains **1,061,605 candidates** across **9 subjects**. The app ing
 
 - [Features](#features)
 - [Tech Stack](#tech-stack)
+- [Workflow](#workflow)
+  - [1. Data ingestion (CSV → database)](#1-data-ingestion-csv--database)
+  - [2. Request flow (client → database)](#2-request-flow-client--database)
 - [Architecture & Key Design Decisions](#architecture--key-design-decisions)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
@@ -61,6 +64,73 @@ The dataset contains **1,061,605 candidates** across **9 subjects**. The app ing
 **Infrastructure**
 - Docker / Docker Compose
 - Nginx (serves the production frontend build + SPA fallback routing)
+
+---
+
+## Workflow
+
+### 1. Data ingestion (CSV → database)
+
+```
+diem_thi_thpt_2024.csv
+        │
+        ▼
+CsvScoreSeederService (CommandLineRunner, app.seeder.enabled=true)
+        │
+        ├─ reads migration_checkpoint → resumes from last_line_offset (or starts at 0)
+        │
+        ▼
+  read next batch of lines (batch size configurable)
+        │
+        ├─► parse + unpivot each row (CsvRowParser)     9 subject columns → 9 (thi_sinh, mon_thi, diem) facts
+        │
+        ├─► write Group A (Toán+Lý+Hóa) totals to Redis   ZADD leaderboard:groupA
+        │        (written first — safe to redo on crash, since ZADD is idempotent)
+        │
+        └─► batch INSERT into ket_qua_thi (KetQuaThiBatchInsertService)
+                 + advance migration_checkpoint.last_line_offset       (same DB transaction)
+        │
+        ▼
+  more lines left? ── yes ──► loop to next batch
+        │
+        no
+        ▼
+  migration_checkpoint.status = COMPLETED
+```
+
+Flyway migrations (`V1__init_schema.sql`, `V2__seed_reference_data.sql`) run automatically on every backend startup, before the seeder, and create the schema plus the small reference tables (`mon_thi`, `ngoai_ngu`). The seeder only ever touches the large fact table (`ket_qua_thi`) and is safe to leave running — it checks its own checkpoint and no-ops once `COMPLETED`.
+
+### 2. Request flow (client → database)
+
+```
+React SPA (Lookup / Report / Leaderboard page)
+        │  fetch()
+        ▼
+Spring Controller  (ScoreController / ReportController / LeaderboardController)
+        │
+        ▼
+Service layer
+        │
+        ├─ ScoreService            → thi_sinh + ket_qua_thi (always a direct Postgres read — single row, no caching needed)
+        │
+        ├─ ReportService           → Redis (report:band_counts:{monThiId}) hit?
+        │                                ├─ yes → return cached band counts
+        │                                └─ no  → aggregate ket_qua_thi (indexed GROUP BY) → cache if seed COMPLETED
+        │
+        └─ LeaderboardService      → seed COMPLETED?
+                                         ├─ no  → aggregate top 10 from Postgres directly
+                                         └─ yes → read Redis ZSET leaderboard:groupA
+                                                      ├─ enough members & consistent with Postgres count → re-sort by tie-break, return
+                                                      └─ suspect/partial → fall back to Postgres aggregation
+        │
+        ▼
+DTO (Java record) ──► GlobalExceptionHandler maps any failure to a consistent ApiError JSON shape
+        │
+        ▼
+JSON response ──► React state ──► rendered table / chart / lookup card
+```
+
+Every read path is designed to never expose partially-seeded data: both the report cache and the leaderboard cache are only trusted once `migration_checkpoint.status = COMPLETED` for the active dataset file, so a report or leaderboard requested mid-import always falls back to a live (if incomplete) Postgres query instead of serving a stale or partial cached result.
 
 ---
 
