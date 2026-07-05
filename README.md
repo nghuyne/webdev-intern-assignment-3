@@ -6,8 +6,18 @@ The dataset contains **1,061,605 candidates** across **9 subjects**. The app ing
 
 ---
 
+## Live Demo
+
+- **Frontend:** https://webdev-intern-assignment-3-antg45hj5-gos22.vercel.app
+- **Backend API:** https://gscores-backend-54hq.onrender.com
+
+The demo is seeded with a **10,000-row sample** of the dataset (not the full 1,061,605 rows) — it's meant to let reviewers see the app running end-to-end, not to showcase full-dataset scale. Run locally via Docker Compose (see [Getting Started](#getting-started)) to try it with the complete dataset. See [Deployment](#deployment) for how the demo is hosted and seeded.
+
+---
+
 ## Table of Contents
 
+- [Live Demo](#live-demo)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Workflow](#workflow)
@@ -379,41 +389,23 @@ npm run lint
 
 The application is fully containerized: `docker-compose.yml` builds production images for both services (a JRE-slim runtime image for the backend, an Nginx-served static build for the frontend), so it can be deployed as-is to any container host by pointing `APP_CORS_ALLOWED_ORIGINS` and `VITE_API_BASE_URL` at the deployed domains.
 
-A free-tier deploy typically needs a split setup, since a single free-tier host generally can't fit both a Postgres+Redis instance and the ~1M-row dataset:
+The live demo above uses a free-tier split, since a single free-tier host generally can't fit both a Postgres+Redis instance and the ~1M-row dataset:
 
-- **Postgres** → [Supabase](https://supabase.com) (free tier)
-- **Backend + Redis** → [Railway](https://railway.app) (free tier)
+- **Postgres + Redis + backend** → [Render](https://render.com) (free tier), provisioned from `render.yaml` (Blueprint)
 - **Frontend** → [Vercel](https://vercel.com) (free tier)
 
-Because free-tier Postgres/Redis storage is limited, the demo seeds `dataset/diem_thi_thpt_2024_demo.csv` (10,000 rows) instead of the full dataset. The seeder reads the CSV from the classpath, not a mounted volume, since Railway doesn't support host-mounted volumes like Docker Compose does — the demo CSV is already bundled at `backend/src/main/resources/dataset/diem_thi_thpt_2024_demo.csv` so it ships inside the built image.
+Because free-tier Postgres/Redis storage is limited, the demo seeds `dataset/diem_thi_thpt_2024_demo.csv` (10,000 rows) instead of the full dataset. The seeder reads the CSV from the classpath, not a mounted volume, since Render doesn't support host-mounted volumes like Docker Compose does — the demo CSV is already bundled at `backend/src/main/resources/dataset/diem_thi_thpt_2024_demo.csv` so it ships inside the built image.
 
-### 1. Supabase (Postgres)
+### 1. Render (Postgres + Redis + backend)
 
-1. Create a new project at [supabase.com](https://supabase.com).
-2. Grab the connection details from **Project Settings → Database** (host, port, database, user, password).
-3. Flyway runs the schema migrations automatically on the backend's first startup — no manual SQL needed.
+1. Push `render.yaml` to the repo, then create a new **Blueprint** from this repo at [dashboard.render.com](https://dashboard.render.com/blueprints) — it provisions the `gscores-db` Postgres instance, the `gscores-redis` instance, and the `gscores-backend` web service (built from `backend/Dockerfile`) in one go.
+2. The backend runs with `SPRING_PROFILES_ACTIVE=render` (see `application-render.yml`), which reads the Postgres connection from Render's injected `PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD` env vars and Redis from `SPRING_DATA_REDIS_HOST`/`SPRING_DATA_REDIS_PORT`.
+3. `APP_SEEDER_ENABLED=true` and `APP_SEEDER_CSV_PATH=classpath:dataset/diem_thi_thpt_2024_demo.csv` are set in `render.yaml` so the first deploy seeds the 10,000-row demo dataset automatically — watch the logs for `Seed completed for diem_thi_thpt_2024_demo.csv`.
+4. `APP_CORS_ALLOWED_ORIGINS` is left unset (`sync: false` in `render.yaml`) until the Vercel URL is known — set it manually in the Render dashboard once step 2 below is done, then redeploy.
+5. Note the public Render backend URL (e.g. `https://gscores-backend-54hq.onrender.com`) for the next step.
 
-### 2. Railway (backend + Redis)
+### 2. Vercel (frontend)
 
-1. Create a new Railway project, add a **Redis** plugin, and add a service built from `backend/Dockerfile`.
-2. Set these environment variables on the backend service:
-
-   | Variable | Value |
-   |---|---|
-   | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://<supabase-host>:5432/postgres?reWriteBatchedInserts=true` |
-   | `SPRING_DATASOURCE_USERNAME` | Supabase Postgres user |
-   | `SPRING_DATASOURCE_PASSWORD` | Supabase Postgres password |
-   | `SPRING_DATA_REDIS_HOST` / `SPRING_DATA_REDIS_PORT` / `SPRING_DATA_REDIS_PASSWORD` | From Railway's Redis plugin (`REDISHOST` / `REDISPORT` / `REDISPASSWORD`) |
-   | `APP_SEEDER_ENABLED` | `true` for the first deploy only |
-   | `APP_SEEDER_CSV_PATH` | `classpath:dataset/diem_thi_thpt_2024_demo.csv` |
-   | `APP_SEEDER_FILE_NAME` | `diem_thi_thpt_2024_demo.csv` |
-   | `APP_CORS_ALLOWED_ORIGINS` | Your Vercel URL, once known (step 3) |
-
-3. Deploy, then watch the logs for `Seed completed for diem_thi_thpt_2024_demo.csv`. After that, set `APP_SEEDER_ENABLED=false` and redeploy — same as the local Docker Compose flow, just against a different CSV.
-4. Note the public Railway backend URL for step 3.
-
-### 3. Vercel (frontend)
-
-1. Import `frontend/` as a Vercel project (framework preset: Vite).
-2. Set the build-time environment variable `VITE_API_BASE_URL` to the Railway backend URL from step 2.
-3. Deploy, then go back to Railway and set `APP_CORS_ALLOWED_ORIGINS` to the resulting Vercel URL (redeploy the backend so the change takes effect).
+1. Import `frontend/` as a Vercel project (`frontend/vercel.json` sets the framework preset/build config).
+2. Set the build-time environment variable `VITE_API_BASE_URL` to the Render backend URL from step 1.
+3. Deploy, then go back to Render and set `APP_CORS_ALLOWED_ORIGINS` to the resulting Vercel URL (redeploy the backend so the change takes effect).
