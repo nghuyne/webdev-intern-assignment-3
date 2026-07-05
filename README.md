@@ -6,17 +6,8 @@ The dataset contains **1,061,605 candidates** across **9 subjects**. The app ing
 
 ---
 
-## Live Demo
-
-**[TODO: add Vercel URL here]**
-
-The demo is seeded with a **10,000-row sample** of the dataset — free-tier Postgres/Redis can't fit the full 1,061,605 rows. All features work identically at this scale; run locally via Docker Compose (see [Getting Started](#getting-started)) to see it with the full dataset. See [Deployment](#deployment) for how the demo is hosted and seeded.
-
----
-
 ## Table of Contents
 
-- [Live Demo](#live-demo)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture & Key Design Decisions](#architecture--key-design-decisions)
@@ -117,7 +108,7 @@ webdev-intern-assignment-3/
 │       └── pages/                    Lookup, Report, Leaderboard
 ├── dataset/
 │   ├── diem_thi_thpt_2024.csv         Raw source data (1,061,605 rows)
-│   └── diem_thi_thpt_2024_demo.csv    10,000-row sample, used for the free-tier live demo
+│   └── diem_thi_thpt_2024_demo.csv    10,000-row sample, used for free-tier deploys
 └── docker-compose.yml
 ```
 
@@ -318,7 +309,7 @@ npm run lint
 
 The application is fully containerized: `docker-compose.yml` builds production images for both services (a JRE-slim runtime image for the backend, an Nginx-served static build for the frontend), so it can be deployed as-is to any container host by pointing `APP_CORS_ALLOWED_ORIGINS` and `VITE_API_BASE_URL` at the deployed domains.
 
-The live demo linked above uses a free-tier split, since a single free-tier host generally can't fit both a Postgres+Redis instance and the ~1M-row dataset:
+A free-tier deploy typically needs a split setup, since a single free-tier host generally can't fit both a Postgres+Redis instance and the ~1M-row dataset:
 
 - **Postgres** → [Supabase](https://supabase.com) (free tier)
 - **Backend + Redis** → [Railway](https://railway.app) (free tier)
