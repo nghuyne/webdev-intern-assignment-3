@@ -9,6 +9,7 @@ services:
     name: gscores-redis
     plan: free
     maxmemoryPolicy: noeviction
+    ipAllowList: []
 
   - type: web
     name: gscores-backend
@@ -51,10 +52,7 @@ services:
           type: redis
           property: port
       - key: SPRING_DATA_REDIS_PASSWORD
-        fromService:
-          name: gscores-redis
-          type: redis
-          property: password
+        value: ""
       - key: APP_SEEDER_ENABLED
         value: "true"
       - key: APP_SEEDER_CSV_PATH
